@@ -20,6 +20,7 @@ export { PDF_ATTACHMENT_CLASS, PDF_ATTACHMENT_PREVIEW_EVENT } from "@/constants/
 export * from "@/helpers/common";
 export * from "@/helpers/yjs-utils";
 export * from "@/plane-editor/helpers/markdown-import";
+export * from "@/plane-editor/helpers/pdf-page-import";
 export { PdfAttachmentExtension } from "@/plane-editor/extensions/pdf-attachment";
 
 export { CORE_EXTENSIONS } from "@/constants/extension";

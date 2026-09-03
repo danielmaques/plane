@@ -9,6 +9,28 @@ export default {
     open_new_tab: "Abrir em nova aba",
     download: "Baixar",
   },
+  page_pdf_import: {
+    action: "Importar PDF",
+    title: "Importar PDF como Pages",
+    description: "Crie uma Page para cada PDF, com visualização incorporada e download.",
+    choose_files: "Escolher arquivos PDF",
+    choose_another: "Escolher outros arquivos",
+    file_help: "Cada PDF vira uma Page na pasta atual e mantém o nível de acesso selecionado.",
+    import: "Importar Pages",
+    importing: "Importando…",
+    summary: "{files} arquivos · {success} importados · {errors} erros",
+    status: {
+      pending: "Pronto",
+      running: "Importando",
+      success: "Importado",
+      error: "Erro",
+    },
+    errors: {
+      create_page: "Não foi possível criar a Page.",
+      asset_url: "Não foi possível criar a URL de download do PDF.",
+      import_failed: "Não foi possível importar este PDF como Page.",
+    },
+  },
   page_markdown_import: {
     action: "Importar Markdown",
     title: "Importar pasta Markdown",

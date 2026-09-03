@@ -12,7 +12,7 @@ import { EPageAccess } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 // plane types
 import { Button } from "@plane/propel/button";
-import { FolderPlus, Upload } from "lucide-react";
+import { FileUp, FolderPlus, Upload } from "lucide-react";
 import { PageIcon } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TPage } from "@plane/types";
@@ -22,6 +22,7 @@ import { Breadcrumbs, Header } from "@plane/ui";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { FolderFormModal } from "@/components/pages/folders";
 import { MarkdownImportModal } from "@/components/pages/modals/markdown-import-modal";
+import { PdfPageImportModal } from "@/components/pages/modals/pdf-page-import-modal";
 // hooks
 import { useProject } from "@/hooks/store/use-project";
 // plane web imports
@@ -34,6 +35,7 @@ export const PagesListHeader = observer(function PagesListHeader() {
   const [isCreatingPage, setIsCreatingPage] = useState(false);
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
   const [isImportingMarkdown, setIsImportingMarkdown] = useState(false);
+  const [isImportingPdf, setIsImportingPdf] = useState(false);
   // router
   const router = useRouter();
   const { workspaceSlug, projectId } = useParams();
@@ -89,6 +91,14 @@ export const PagesListHeader = observer(function PagesListHeader() {
         projectId={projectId?.toString() ?? ""}
         workspaceSlug={workspaceSlug?.toString() ?? ""}
       />
+      <PdfPageImportModal
+        access={activeFolder?.access ?? (pageType === "private" ? EPageAccess.PRIVATE : EPageAccess.PUBLIC)}
+        folderId={activeFolder?.id ?? null}
+        isOpen={isImportingPdf}
+        onClose={() => setIsImportingPdf(false)}
+        projectId={projectId?.toString() ?? ""}
+        workspaceSlug={workspaceSlug?.toString() ?? ""}
+      />
       <Header>
         <Header.LeftItem>
           <Breadcrumbs isLoading={loader === "init-loader"}>
@@ -114,6 +124,10 @@ export const PagesListHeader = observer(function PagesListHeader() {
             <Button variant="secondary" size="lg" onClick={() => setIsImportingMarkdown(true)}>
               <Upload className="mr-1 h-4 w-4" />
               {t("page_markdown_import.action")}
+            </Button>
+            <Button variant="secondary" size="lg" onClick={() => setIsImportingPdf(true)}>
+              <FileUp className="mr-1 h-4 w-4" />
+              {t("page_pdf_import.action")}
             </Button>
             {!activeFolder && (
               <Button variant="secondary" size="lg" onClick={() => setIsCreatingFolder(true)}>

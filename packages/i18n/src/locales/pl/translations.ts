@@ -9,6 +9,28 @@ export default {
     open_new_tab: "Open in new tab",
     download: "Download",
   },
+  page_pdf_import: {
+    action: "Import PDF",
+    title: "Import PDF as Pages",
+    description: "Create one Page per PDF file, with an embedded preview and download.",
+    choose_files: "Choose PDF files",
+    choose_another: "Choose other files",
+    file_help: "Each PDF becomes a Page in the current folder and keeps the current access level.",
+    import: "Import Pages",
+    importing: "Importing…",
+    summary: "{files} files · {success} imported · {errors} errors",
+    status: {
+      pending: "Ready",
+      running: "Importing",
+      success: "Imported",
+      error: "Error",
+    },
+    errors: {
+      create_page: "Page could not be created.",
+      asset_url: "The PDF download URL could not be created.",
+      import_failed: "This PDF could not be imported as a Page.",
+    },
+  },
   page_markdown_import: {
     action: "Import Markdown",
     title: "Import Markdown folder",
