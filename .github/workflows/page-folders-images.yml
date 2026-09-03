@@ -129,13 +129,14 @@ jobs:
         env:
           COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
           COOLIFY_DEPLOY_WEBHOOK: ${{ secrets.COOLIFY_DEPLOY_WEBHOOK }}
+          COOLIFY_SERVICE_UUID: jpihygm2gggmkcg5jgzdxron
         run: |
           test -n "$COOLIFY_API_TOKEN"
           test -n "$COOLIFY_DEPLOY_WEBHOOK"
-          COOLIFY_DEPLOY_WEBHOOK="${COOLIFY_DEPLOY_WEBHOOK/force=false/force=true}"
+          coolify_api="${COOLIFY_DEPLOY_WEBHOOK%%/api/v1/*}/api/v1"
           curl --fail --show-error --silent \
             --request POST \
             --retry 3 \
             --retry-all-errors \
             --header "Authorization: Bearer ${COOLIFY_API_TOKEN}" \
-            "$COOLIFY_DEPLOY_WEBHOOK"
+            "${coolify_api}/services/${COOLIFY_SERVICE_UUID}/restart?latest=true"
