@@ -54,7 +54,7 @@ Create a separate Coolify application with its own hostname, network, PostgreSQL
 2. Start staging on the official `v1.3.0` images first and verify login, existing pages, attachments, and collaborative editing.
 3. Change only the five image references described above to the versioned GHCR images.
 4. Run `migrator` once and require a successful exit before starting or restarting the other backend services.
-5. Confirm the migration creates `page_folders` and the nullable `pages_page.folder_id` relation without modifying existing page content.
+5. Confirm the migration creates `page_folders` and the nullable `pages.folder_id` relation without modifying existing page content.
 6. Test public, private, and archived pages as member, guest, folder owner, project admin, and workspace admin on desktop and mobile.
 7. Test create, rename, navigate, search, move, archive, restore, and delete-empty-folder behavior. Confirm deletion of a folder containing an active or archived page is rejected.
 8. Switch staging back to the official `v1.3.0` images without reversing the migration. Confirm all existing pages appear as a flat root list and their content and attachments remain intact.
