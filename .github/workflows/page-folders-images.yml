@@ -4,13 +4,6 @@ on:
   push:
     branches:
       - prod
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: Versioned image tag
-        required: true
-        default: v1.3.0-folders.2
-        type: string
 
 permissions:
   contents: read
@@ -37,15 +30,8 @@ jobs:
 
       - id: tags
         name: Resolve immutable and production tags
-        env:
-          DISPATCH_TAG: ${{ inputs.tag }}
         run: |
-          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
-            production_tag="${DISPATCH_TAG}"
-          else
-            production_tag="production"
-          fi
-          echo "production=${production_tag}" >> "$GITHUB_OUTPUT"
+          echo "production=production" >> "$GITHUB_OUTPUT"
           echo "revision=sha-${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
 
   frontend:
