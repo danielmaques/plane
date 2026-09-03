@@ -291,6 +291,7 @@ CELERY_IMPORTS = (
 )
 
 FILE_SIZE_LIMIT = int(os.environ.get("FILE_SIZE_LIMIT", 5242880))
+PAGE_PDF_SIZE_LIMIT = int(os.environ.get("PAGE_PDF_SIZE_LIMIT", 52428800))
 
 # Unsplash Access key
 UNSPLASH_ACCESS_KEY = os.environ.get("UNSPLASH_ACCESS_KEY")

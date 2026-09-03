@@ -5,6 +5,7 @@
 # Python imports
 import uuid
 import base64
+import re
 import requests
 from bs4 import BeautifulSoup
 
@@ -43,6 +44,20 @@ def extract_asset_ids(html, tag):
         return []
 
 
+def extract_pdf_asset_ids(html):
+    try:
+        soup = BeautifulSoup(html, "html.parser")
+        asset_ids = []
+        for link in soup.select("a.plane-pdf-attachment[href]"):
+            match = re.search(r"/download/([0-9a-f-]+)/?(?:#.*)?$", link.get("href", ""), re.IGNORECASE)
+            if match:
+                asset_ids.append(match.group(1))
+        return asset_ids
+    except Exception as e:
+        log_exception(e)
+        return []
+
+
 def replace_asset_ids(html, tag, duplicated_assets):
     try:
         soup = BeautifulSoup(html, "html.parser")
@@ -50,6 +65,21 @@ def replace_asset_ids(html, tag, duplicated_assets):
             for asset in duplicated_assets:
                 if mention_tag.get("src") == asset["old_asset_id"]:
                     mention_tag["src"] = asset["new_asset_id"]
+        return str(soup)
+    except Exception as e:
+        log_exception(e)
+        return html
+
+
+def replace_pdf_asset_ids(html, duplicated_assets):
+    try:
+        soup = BeautifulSoup(html, "html.parser")
+        asset_map = {asset["old_asset_id"]: asset["new_asset_id"] for asset in duplicated_assets}
+        for link in soup.select("a.plane-pdf-attachment[href]"):
+            href = link.get("href", "")
+            match = re.search(r"/download/([0-9a-f-]+)/?(?:#.*)?$", href, re.IGNORECASE)
+            if match and match.group(1) in asset_map:
+                link["href"] = href.replace(match.group(1), asset_map[match.group(1)])
         return str(soup)
     except Exception as e:
         log_exception(e)
@@ -136,17 +166,29 @@ def copy_s3_objects_of_description_and_assets(entity_name, entity_identifier, pr
             raise ValueError(f"Unsupported entity_name: {entity_name}")
 
         entity = model_class.objects.get(id=entity_identifier)
-        asset_ids = extract_asset_ids(entity.description_html, "image-component")
+        asset_ids = list(
+            dict.fromkeys(
+                extract_asset_ids(entity.description_html, "image-component")
+                + extract_pdf_asset_ids(entity.description_html)
+            )
+        )
 
         duplicated_assets = copy_assets(entity, entity_identifier, project_id, asset_ids, user_id)
 
-        updated_html = update_description(entity, duplicated_assets, "image-component")
+        updated_html = replace_asset_ids(entity.description_html, "image-component", duplicated_assets)
+        updated_html = replace_pdf_asset_ids(updated_html, duplicated_assets)
+        entity.description_html = updated_html
+        entity.save()
 
         external_data = sync_with_external_service(entity_name, updated_html)
 
         if external_data:
-            entity.description_json = external_data.get("description_json")
-            entity.description_binary = base64.b64decode(external_data.get("description_binary"))
+            description_json = external_data.get("description_json")
+            description_binary = external_data.get("description_binary")
+            if description_json is not None:
+                entity.description_json = description_json
+            if description_binary is not None:
+                entity.description_binary = base64.b64decode(description_binary)
             entity.save()
 
         return

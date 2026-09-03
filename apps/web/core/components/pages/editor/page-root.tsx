@@ -7,7 +7,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { observer } from "mobx-react";
 // plane imports
-import type { CollaborationState, EditorRefApi } from "@plane/editor";
+import { PDF_ATTACHMENT_PREVIEW_EVENT } from "@plane/editor";
+import type { CollaborationState, EditorRefApi, TPdfAttachmentPreviewEventDetail } from "@plane/editor";
 import type { TDocumentPayload, TPage, TPageVersion, TWebhookConnectionQueryParams } from "@plane/types";
 // hooks
 import { usePageFallback } from "@/hooks/use-page-fallback";
@@ -26,6 +27,7 @@ import { ContentLimitBanner } from "./content-limit-banner";
 import { PageEditorBody } from "./editor-body";
 import type { TEditorBodyConfig, TEditorBodyHandlers } from "./editor-body";
 import { PageEditorToolbarRoot } from "./toolbar";
+import { PdfPreviewModal } from "./pdf-preview-modal";
 
 export type TPageRootHandlers = {
   create: (payload: Partial<TPage>) => Promise<Partial<TPage> | undefined>;
@@ -64,6 +66,7 @@ export const PageRoot = observer(function PageRoot(props: TPageRootProps) {
   const [editorReady, setEditorReady] = useState(false);
   const [collaborationState, setCollaborationState] = useState<CollaborationState | null>(null);
   const [showContentTooLargeBanner, setShowContentTooLargeBanner] = useState(false);
+  const [pdfAttachment, setPdfAttachment] = useState<TPdfAttachmentPreviewEventDetail | null>(null);
   // refs
   const editorRef = useRef<EditorRefApi>(null);
   // derived values
@@ -95,6 +98,15 @@ export const PageRoot = observer(function PageRoot(props: TPageRootProps) {
       setEditorRef(editorRef.current);
     }, 0);
   }, [isContentEditable, setEditorRef]);
+
+  useEffect(() => {
+    const handlePdfPreview = (event: Event) => {
+      const detail = (event as CustomEvent<TPdfAttachmentPreviewEventDetail>).detail;
+      if (detail.status === "ready" && detail.assetId) setPdfAttachment(detail);
+    };
+    window.addEventListener(PDF_ATTACHMENT_PREVIEW_EVENT, handlePdfPreview);
+    return () => window.removeEventListener(PDF_ATTACHMENT_PREVIEW_EVENT, handlePdfPreview);
+  }, []);
 
   // Get extensions and navigation logic from hook
   const {
@@ -201,6 +213,12 @@ export const PageRoot = observer(function PageRoot(props: TPageRootProps) {
         extensions={navigationPaneExtensions}
       />
       <PageModals page={page} storeType={storeType} />
+      <PdfPreviewModal
+        attachment={pdfAttachment}
+        onClose={() => setPdfAttachment(null)}
+        projectId={projectId}
+        workspaceSlug={workspaceSlug}
+      />
     </div>
   );
 });

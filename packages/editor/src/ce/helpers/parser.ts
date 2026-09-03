@@ -9,7 +9,18 @@
  * @param htmlContent
  * @returns {string[]} array of additional asset sources
  */
-export const extractAdditionalAssetsFromHTMLContent = (_htmlContent: string): string[] => [];
+const PDF_ASSET_PATH_PATTERN = /\/download\/([0-9a-f-]+)\/?(?:#.*)?$/i;
+
+export const extractAdditionalAssetsFromHTMLContent = (htmlContent: string): string[] => {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(htmlContent, "text/html");
+  const assetIds = new Set<string>();
+  doc.querySelectorAll("a.plane-pdf-attachment[href]").forEach((link) => {
+    const assetId = link.getAttribute("href")?.match(PDF_ASSET_PATH_PATTERN)?.[1];
+    if (assetId) assetIds.add(assetId);
+  });
+  return Array.from(assetIds);
+};
 
 /**
  * @description function to replace additional assets in HTML content with new IDs
@@ -20,6 +31,14 @@ export const replaceAdditionalAssetsInHTMLContent = (props: {
   htmlContent: string;
   assetMap: Record<string, string>;
 }): string => {
-  const { htmlContent } = props;
-  return htmlContent;
+  const { htmlContent, assetMap } = props;
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(htmlContent, "text/html");
+  doc.querySelectorAll("a.plane-pdf-attachment[href]").forEach((link) => {
+    const href = link.getAttribute("href") ?? "";
+    const oldAssetId = href.match(PDF_ASSET_PATH_PATTERN)?.[1];
+    if (!oldAssetId || !assetMap[oldAssetId]) return;
+    link.setAttribute("href", href.replace(oldAssetId, assetMap[oldAssetId]));
+  });
+  return doc.body.innerHTML;
 };

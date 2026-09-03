@@ -18,12 +18,129 @@ from rest_framework.permissions import AllowAny
 
 # Module imports
 from ..base import BaseAPIView
-from plane.db.models import FileAsset, Workspace, Project, User
+from plane.db.models import FileAsset, Page, Project, ProjectMember, User, Workspace, WorkspaceMember
 from plane.settings.storage import S3Storage
 from plane.app.permissions import allow_permission, ROLE
 from plane.utils.cache import invalidate_cache_directly
 from plane.bgtasks.storage_metadata_task import get_asset_object_metadata
 from plane.throttles.asset import AssetRateThrottle
+
+
+PAGE_IMAGE_MIME_TYPES = [
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "image/jpg",
+    "image/gif",
+]
+
+
+def _get_page(slug, project_id, page_id):
+    return (
+        Page.objects.filter(
+            id=page_id,
+            workspace__slug=slug,
+            projects__id=project_id,
+            project_pages__deleted_at__isnull=True,
+        )
+        .distinct()
+        .first()
+    )
+
+
+def _get_asset_page(asset, slug, project_id):
+    if asset.entity_type != FileAsset.EntityTypeContext.PAGE_DESCRIPTION or not asset.page_id:
+        return None
+    return _get_page(slug=slug, project_id=project_id, page_id=asset.page_id)
+
+
+def _is_project_member(user, slug, project_id):
+    return ProjectMember.objects.filter(
+        member=user,
+        workspace__slug=slug,
+        project_id=project_id,
+        is_active=True,
+    ).exists()
+
+
+def _can_edit_page(user, page, slug, project_id):
+    if page.owned_by_id == user.id:
+        return True
+    if page.access == Page.PRIVATE_ACCESS:
+        return False
+
+    if ProjectMember.objects.filter(
+        member=user,
+        workspace__slug=slug,
+        project_id=project_id,
+        role__in=[ROLE.ADMIN.value, ROLE.MEMBER.value],
+        is_active=True,
+    ).exists():
+        return True
+
+    return (
+        _is_project_member(user, slug, project_id)
+        and WorkspaceMember.objects.filter(
+            member=user,
+            workspace__slug=slug,
+            role=ROLE.ADMIN.value,
+            is_active=True,
+        ).exists()
+    )
+
+
+def _page_asset_permission_response(request, asset, slug, project_id, *, edit=False):
+    page = _get_asset_page(asset=asset, slug=slug, project_id=project_id)
+    if page is None:
+        return Response({"error": "Page not found."}, status=status.HTTP_404_NOT_FOUND)
+
+    if page.access == Page.PRIVATE_ACCESS and page.owned_by_id != request.user.id:
+        return Response({"error": "Permission denied."}, status=status.HTTP_403_FORBIDDEN)
+
+    if not _is_project_member(request.user, slug, project_id):
+        return Response({"error": "Permission denied."}, status=status.HTTP_403_FORBIDDEN)
+
+    if edit:
+        if page.is_locked:
+            return Response({"error": "Page is locked."}, status=status.HTTP_400_BAD_REQUEST)
+        if page.archived_at is not None:
+            return Response({"error": "Page is archived."}, status=status.HTTP_400_BAD_REQUEST)
+        if not _can_edit_page(request.user, page, slug, project_id):
+            return Response({"error": "Permission denied."}, status=status.HTTP_403_FORBIDDEN)
+
+    return None
+
+
+def _page_asset_workspace_permission_response(request, asset, slug, *, edit=False):
+    if asset.project_id:
+        project_ids = [asset.project_id]
+    else:
+        project_ids = list(
+            Project.objects.filter(
+                workspace__slug=slug,
+                project_pages__page_id=asset.page_id,
+                project_pages__deleted_at__isnull=True,
+            ).values_list("id", flat=True)
+        )
+
+    if not project_ids:
+        return Response({"error": "Project not found."}, status=status.HTTP_404_NOT_FOUND)
+
+    fallback_response = None
+    for project_id in project_ids:
+        permission_response = _page_asset_permission_response(
+            request=request,
+            asset=asset,
+            slug=slug,
+            project_id=project_id,
+            edit=edit,
+        )
+        if permission_response is None:
+            return None
+        if permission_response.status_code != status.HTTP_403_FORBIDDEN:
+            fallback_response = permission_response
+
+    return fallback_response or Response({"error": "Permission denied."}, status=status.HTTP_403_FORBIDDEN)
 
 
 class UserAssetsV2Endpoint(BaseAPIView):
@@ -379,6 +496,15 @@ class WorkspaceFileAssetEndpoint(BaseAPIView):
     def patch(self, request, slug, asset_id):
         # get the asset id
         asset = FileAsset.objects.get(id=asset_id, workspace__slug=slug)
+        if asset.entity_type == FileAsset.EntityTypeContext.PAGE_DESCRIPTION:
+            permission_response = _page_asset_workspace_permission_response(
+                request=request,
+                asset=asset,
+                slug=slug,
+                edit=True,
+            )
+            if permission_response:
+                return permission_response
         # get the storage metadata
         asset.is_uploaded = True
         # get the storage metadata
@@ -399,6 +525,15 @@ class WorkspaceFileAssetEndpoint(BaseAPIView):
 
     def delete(self, request, slug, asset_id):
         asset = FileAsset.objects.get(id=asset_id, workspace__slug=slug)
+        if asset.entity_type == FileAsset.EntityTypeContext.PAGE_DESCRIPTION:
+            permission_response = _page_asset_workspace_permission_response(
+                request=request,
+                asset=asset,
+                slug=slug,
+                edit=True,
+            )
+            if permission_response:
+                return permission_response
         asset.is_deleted = True
         asset.deleted_at = timezone.now()
         # get the entity and save the asset id for the request field
@@ -409,6 +544,14 @@ class WorkspaceFileAssetEndpoint(BaseAPIView):
     def get(self, request, slug, asset_id):
         # get the asset id
         asset = FileAsset.objects.get(id=asset_id, workspace__slug=slug)
+        if asset.entity_type == FileAsset.EntityTypeContext.PAGE_DESCRIPTION:
+            permission_response = _page_asset_workspace_permission_response(
+                request=request,
+                asset=asset,
+                slug=slug,
+            )
+            if permission_response:
+                return permission_response
 
         # Check if the asset is uploaded
         if not asset.is_uploaded:
@@ -471,6 +614,18 @@ class AssetRestoreEndpoint(BaseAPIView):
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
     def post(self, request, slug, asset_id):
         asset = FileAsset.all_objects.get(id=asset_id, workspace__slug=slug)
+        if asset.entity_type == FileAsset.EntityTypeContext.PAGE_DESCRIPTION:
+            if not asset.project_id:
+                return Response({"error": "Project not found."}, status=status.HTTP_404_NOT_FOUND)
+            permission_response = _page_asset_permission_response(
+                request=request,
+                asset=asset,
+                slug=slug,
+                project_id=asset.project_id,
+                edit=True,
+            )
+            if permission_response:
+                return permission_response
         asset.is_deleted = False
         asset.deleted_at = None
         asset.save(update_fields=["is_deleted", "deleted_at"])
@@ -513,7 +668,12 @@ class ProjectAssetEndpoint(BaseAPIView):
     def post(self, request, slug, project_id):
         name = request.data.get("name")
         type = request.data.get("type", "image/jpeg")
-        size = int(request.data.get("size", settings.FILE_SIZE_LIMIT))
+        try:
+            size = int(request.data.get("size", settings.FILE_SIZE_LIMIT))
+        except (TypeError, ValueError):
+            return Response({"error": "Invalid file size."}, status=status.HTTP_400_BAD_REQUEST)
+        if size <= 0:
+            return Response({"error": "Invalid file size."}, status=status.HTTP_400_BAD_REQUEST)
         entity_type = request.data.get("entity_type", "")
         entity_identifier = request.data.get("entity_identifier")
 
@@ -524,15 +684,36 @@ class ProjectAssetEndpoint(BaseAPIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Check if the file type is allowed
-        allowed_types = [
-            "image/jpeg",
-            "image/png",
-            "image/webp",
-            "image/jpg",
-            "image/gif",
-        ]
-        if type not in allowed_types:
+        page = None
+        if entity_type == FileAsset.EntityTypeContext.PAGE_DESCRIPTION:
+            page = _get_page(slug=slug, project_id=project_id, page_id=entity_identifier)
+            if page is None:
+                return Response({"error": "Page not found."}, status=status.HTTP_404_NOT_FOUND)
+            if page.is_locked:
+                return Response({"error": "Page is locked."}, status=status.HTTP_400_BAD_REQUEST)
+            if page.archived_at is not None:
+                return Response({"error": "Page is archived."}, status=status.HTTP_400_BAD_REQUEST)
+            if not _can_edit_page(request.user, page, slug, project_id):
+                return Response({"error": "Permission denied."}, status=status.HTTP_403_FORBIDDEN)
+
+        is_pdf = type == "application/pdf" or str(name or "").lower().endswith(".pdf")
+        if is_pdf:
+            if (
+                entity_type != FileAsset.EntityTypeContext.PAGE_DESCRIPTION
+                or type != "application/pdf"
+                or not str(name or "").lower().endswith(".pdf")
+            ):
+                return Response(
+                    {"error": "PDF files are only allowed in page descriptions."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if size > settings.PAGE_PDF_SIZE_LIMIT:
+                return Response(
+                    {"error": "PDF file exceeds the configured size limit."},
+                    status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                )
+            size_limit = size
+        elif type not in PAGE_IMAGE_MIME_TYPES:
             return Response(
                 {
                     "error": "Invalid file type. Only JPEG, PNG, WebP, JPG and GIF files are allowed.",
@@ -541,8 +722,8 @@ class ProjectAssetEndpoint(BaseAPIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Get the size limit
-        size_limit = min(settings.FILE_SIZE_LIMIT, size)
+        else:
+            size_limit = min(settings.FILE_SIZE_LIMIT, size)
 
         # Get the workspace
         workspace = Workspace.objects.get(slug=slug)
@@ -580,6 +761,16 @@ class ProjectAssetEndpoint(BaseAPIView):
     def patch(self, request, slug, project_id, pk):
         # get the asset id
         asset = FileAsset.objects.get(id=pk, workspace__slug=slug, project_id=project_id)
+        if asset.entity_type == FileAsset.EntityTypeContext.PAGE_DESCRIPTION:
+            permission_response = _page_asset_permission_response(
+                request=request,
+                asset=asset,
+                slug=slug,
+                project_id=project_id,
+                edit=True,
+            )
+            if permission_response:
+                return permission_response
         # get the storage metadata
         asset.is_uploaded = True
         # get the storage metadata
@@ -596,6 +787,16 @@ class ProjectAssetEndpoint(BaseAPIView):
     def delete(self, request, slug, project_id, pk):
         # Get the asset
         asset = FileAsset.objects.get(id=pk, workspace__slug=slug, project_id=project_id)
+        if asset.entity_type == FileAsset.EntityTypeContext.PAGE_DESCRIPTION:
+            permission_response = _page_asset_permission_response(
+                request=request,
+                asset=asset,
+                slug=slug,
+                project_id=project_id,
+                edit=True,
+            )
+            if permission_response:
+                return permission_response
         # Check deleted assets
         asset.is_deleted = True
         asset.deleted_at = timezone.now()
@@ -607,6 +808,15 @@ class ProjectAssetEndpoint(BaseAPIView):
     def get(self, request, slug, project_id, pk):
         # get the asset id
         asset = FileAsset.objects.get(workspace__slug=slug, project_id=project_id, pk=pk)
+        if asset.entity_type == FileAsset.EntityTypeContext.PAGE_DESCRIPTION:
+            permission_response = _page_asset_permission_response(
+                request=request,
+                asset=asset,
+                slug=slug,
+                project_id=project_id,
+            )
+            if permission_response:
+                return permission_response
 
         # Check if the asset is uploaded
         if not asset.is_uploaded:
@@ -620,7 +830,7 @@ class ProjectAssetEndpoint(BaseAPIView):
         # Generate a presigned URL to share an S3 object
         signed_url = storage.generate_presigned_url(
             object_name=asset.asset.name,
-            disposition="attachment",
+            disposition="inline",
             filename=asset.attributes.get("name"),
         )
         # Redirect to the signed URL
@@ -642,7 +852,11 @@ class ProjectBulkAssetEndpoint(BaseAPIView):
             return Response({"error": "No asset ids provided."}, status=status.HTTP_400_BAD_REQUEST)
 
         # get the asset id
-        assets = FileAsset.objects.filter(id__in=asset_ids, workspace__slug=slug)
+        assets = FileAsset.objects.filter(
+            id__in=asset_ids,
+            workspace__slug=slug,
+            project_id=project_id,
+        )
 
         # Get the first asset
         asset = assets.first()
@@ -675,6 +889,15 @@ class ProjectBulkAssetEndpoint(BaseAPIView):
                 pass
 
         if asset.entity_type == FileAsset.EntityTypeContext.PAGE_DESCRIPTION:
+            page = _get_page(slug=slug, project_id=project_id, page_id=entity_id)
+            if page is None:
+                return Response({"error": "Page not found."}, status=status.HTTP_404_NOT_FOUND)
+            if page.is_locked:
+                return Response({"error": "Page is locked."}, status=status.HTTP_400_BAD_REQUEST)
+            if page.archived_at is not None:
+                return Response({"error": "Page is archived."}, status=status.HTTP_400_BAD_REQUEST)
+            if not _can_edit_page(request.user, page, slug, project_id):
+                return Response({"error": "Permission denied."}, status=status.HTTP_403_FORBIDDEN)
             assets.update(page_id=entity_id)
 
         if asset.entity_type == FileAsset.EntityTypeContext.DRAFT_ISSUE_DESCRIPTION:
@@ -693,8 +916,20 @@ class AssetCheckEndpoint(BaseAPIView):
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
     def get(self, request, slug, asset_id):
-        asset = FileAsset.all_objects.filter(id=asset_id, workspace__slug=slug, deleted_at__isnull=True).exists()
-        return Response({"exists": asset}, status=status.HTTP_200_OK)
+        asset = FileAsset.all_objects.filter(id=asset_id, workspace__slug=slug, deleted_at__isnull=True).first()
+        if asset and asset.entity_type == FileAsset.EntityTypeContext.PAGE_DESCRIPTION:
+            if not asset.project_id:
+                asset = None
+            else:
+                permission_response = _page_asset_permission_response(
+                    request=request,
+                    asset=asset,
+                    slug=slug,
+                    project_id=asset.project_id,
+                )
+                if permission_response:
+                    asset = None
+        return Response({"exists": asset is not None}, status=status.HTTP_200_OK)
 
 
 class DuplicateAssetEndpoint(BaseAPIView):
@@ -752,10 +987,33 @@ class DuplicateAssetEndpoint(BaseAPIView):
                 return Response({"error": "Project not found"}, status=status.HTTP_404_NOT_FOUND)
 
         storage = S3Storage(request=request)
-        original_asset = FileAsset.objects.filter(id=asset_id, is_uploaded=True).first()
+        original_asset = FileAsset.objects.filter(id=asset_id, workspace=workspace, is_uploaded=True).first()
 
         if not original_asset:
             return Response({"error": "Asset not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        if original_asset.entity_type == FileAsset.EntityTypeContext.PAGE_DESCRIPTION:
+            if not original_asset.project_id:
+                return Response({"error": "Project not found."}, status=status.HTTP_404_NOT_FOUND)
+            permission_response = _page_asset_permission_response(
+                request=request,
+                asset=original_asset,
+                slug=slug,
+                project_id=original_asset.project_id,
+            )
+            if permission_response:
+                return permission_response
+
+        if entity_type == FileAsset.EntityTypeContext.PAGE_DESCRIPTION:
+            target_page = _get_page(slug=slug, project_id=project_id, page_id=entity_id)
+            if target_page is None:
+                return Response({"error": "Page not found."}, status=status.HTTP_404_NOT_FOUND)
+            if target_page.is_locked:
+                return Response({"error": "Page is locked."}, status=status.HTTP_400_BAD_REQUEST)
+            if target_page.archived_at is not None:
+                return Response({"error": "Page is archived."}, status=status.HTTP_400_BAD_REQUEST)
+            if not _can_edit_page(request.user, target_page, slug, project_id):
+                return Response({"error": "Permission denied."}, status=status.HTTP_403_FORBIDDEN)
 
         destination_key = f"{workspace.id}/{uuid.uuid4().hex}-{original_asset.attributes.get('name')}"
         duplicated_asset = FileAsset.objects.create(
@@ -797,6 +1055,15 @@ class WorkspaceAssetDownloadEndpoint(BaseAPIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
+        if asset.entity_type == FileAsset.EntityTypeContext.PAGE_DESCRIPTION:
+            permission_response = _page_asset_workspace_permission_response(
+                request=request,
+                asset=asset,
+                slug=slug,
+            )
+            if permission_response:
+                return permission_response
+
         storage = S3Storage(request=request)
         signed_url = storage.generate_presigned_url(
             object_name=asset.asset.name,
@@ -824,6 +1091,16 @@ class ProjectAssetDownloadEndpoint(BaseAPIView):
                 {"error": "The requested asset could not be found."},
                 status=status.HTTP_404_NOT_FOUND,
             )
+
+        if asset.entity_type == FileAsset.EntityTypeContext.PAGE_DESCRIPTION:
+            permission_response = _page_asset_permission_response(
+                request=request,
+                asset=asset,
+                slug=slug,
+                project_id=project_id,
+            )
+            if permission_response:
+                return permission_response
 
         storage = S3Storage(request=request)
         signed_url = storage.generate_presigned_url(

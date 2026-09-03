@@ -8,6 +8,8 @@ from unittest.mock import patch, MagicMock
 from plane.bgtasks.copy_s3_object import (
     copy_s3_objects_of_description_and_assets,
     copy_assets,
+    extract_pdf_asset_ids,
+    replace_pdf_asset_ids,
 )
 import base64
 
@@ -172,3 +174,21 @@ class TestCopyS3Objects:
         # Assert
         assert result == []
         mock_storage_instance.copy_object.assert_not_called()
+
+    def test_extracts_and_replaces_pdf_attachment_links(self):
+        old_asset_id = "11111111-1111-1111-1111-111111111111"
+        new_asset_id = "22222222-2222-2222-2222-222222222222"
+        html = (
+            '<p><a class="plane-pdf-attachment" '
+            f'href="/api/assets/v2/workspaces/test/projects/project/download/{old_asset_id}/'
+            '#plane-pdf=manual.pdf&size=1024">manual.pdf</a></p>'
+        )
+
+        assert extract_pdf_asset_ids(html) == [old_asset_id]
+        replaced = replace_pdf_asset_ids(
+            html,
+            [{"old_asset_id": old_asset_id, "new_asset_id": new_asset_id}],
+        )
+        assert old_asset_id not in replaced
+        assert new_asset_id in replaced
+        assert "#plane-pdf=manual.pdf&amp;size=1024" in replaced

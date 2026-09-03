@@ -70,6 +70,7 @@ export const getEditorFileHandlers = (args: TArgs): TFileHandler => {
       assetId,
     validation: {
       maxFileSize: MAX_FILE_SIZE,
+      maxPdfFileSize: 50 * 1024 * 1024,
     },
   };
 };

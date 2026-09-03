@@ -4,11 +4,11 @@
  * See the LICENSE file for details.
  */
 
-export type TAdditionalEditorAsset = {
+export type TPdfAttachmentPreviewEventDetail = {
+  assetId?: string;
   href: string;
-  id: string;
   name: string;
   size: number;
-  src: string;
-  type: "pdf";
+  status: "error" | "pending" | "ready";
+  uploadId?: string;
 };

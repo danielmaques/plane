@@ -23,6 +23,10 @@ export type TFileHandler = {
      * @example enter 5242880(5 * 1024 * 1024) for 5MB
      */
     maxFileSize: number;
+    /**
+     * @description max PDF attachment size in bytes
+     */
+    maxPdfFileSize: number;
   };
 } & TExtendedFileHandler;
 

@@ -5,6 +5,32 @@
  */
 
 export default {
+  page_pdf: {
+    open_new_tab: "Open in new tab",
+    download: "Download",
+  },
+  page_markdown_import: {
+    action: "Import Markdown",
+    title: "Import Markdown folder",
+    description: "Create one Page per Markdown file and upload its local images.",
+    choose_folder: "Choose a folder",
+    choose_another: "Choose another folder",
+    folder_help: "Markdown, JPEG, PNG, GIF, and WebP files are processed locally before upload.",
+    validating: "Validating files…",
+    import: "Import Pages",
+    importing: "Importing…",
+    summary: "{files} files · {success} imported · {errors} errors",
+    status: {
+      pending: "Ready",
+      running: "Importing",
+      success: "Imported",
+      error: "Error",
+    },
+    errors: {
+      create_page: "Page could not be created.",
+      import_failed: "This Markdown file could not be imported.",
+    },
+  },
   page_folders: {
     new_folder: "New folder",
     rename_folder: "Rename folder",

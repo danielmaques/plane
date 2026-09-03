@@ -12,6 +12,7 @@ export default defineConfig({
   plugins: [tsconfigPaths({ projects: [path.resolve(__dirname, "tsconfig.json")] })],
   test: {
     environment: "node",
-    include: ["tests/**/*.test.ts"],
+    include: ["tests/**/*.test.ts", "../../packages/editor/tests/**/*.test.ts"],
+    setupFiles: ["tests/setup.ts"],
   },
 });

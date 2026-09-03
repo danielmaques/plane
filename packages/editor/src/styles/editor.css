@@ -62,6 +62,66 @@
   display: none;
 }
 
+/* PDF attachments use a regular link mark so documents stay compatible with the official editor. */
+.ProseMirror a.plane-pdf-attachment {
+  display: flex;
+  min-height: 3.5rem;
+  width: 100%;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0.5rem 0;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border-color-subtle-1);
+  border-radius: 0.5rem;
+  background: var(--background-color-layer-1);
+  color: var(--text-color-primary);
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease;
+}
+
+.ProseMirror a.plane-pdf-attachment:hover {
+  border-color: var(--border-color-strong);
+  background: var(--background-color-layer-2);
+}
+
+.ProseMirror a.plane-pdf-attachment::before {
+  content: "PDF";
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  height: 2rem;
+  min-width: 2.5rem;
+  padding: 0 0.4rem;
+  border-radius: 0.35rem;
+  background: color-mix(in srgb, #ef4444 14%, transparent);
+  color: #dc2626;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.ProseMirror a.plane-pdf-attachment--pending::after {
+  content: attr(data-pdf-upload-progress);
+  margin-left: auto;
+  color: var(--text-color-secondary);
+  font-size: 0.75rem;
+}
+
+.ProseMirror a.plane-pdf-attachment--pending [data-pdf-upload-progress]::after {
+  content: " " attr(data-pdf-upload-progress);
+  color: var(--text-color-secondary);
+  font-size: 0.75rem;
+}
+
+.ProseMirror a.plane-pdf-attachment--error {
+  border-color: #ef4444;
+  color: #dc2626;
+}
+
 /* Custom image styles */
 .ProseMirror img {
   margin-top: 0 !important;

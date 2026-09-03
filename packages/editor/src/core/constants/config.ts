@@ -16,6 +16,9 @@ export const DEFAULT_DISPLAY_CONFIG: TDisplayConfig = {
 
 export const ACCEPTED_IMAGE_MIME_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif"];
 
+export const PDF_ATTACHMENT_CLASS = "plane-pdf-attachment";
+export const PDF_ATTACHMENT_PREVIEW_EVENT = "plane:pdf-attachment-preview";
+
 export const ACCEPTED_ATTACHMENT_MIME_TYPES = [
   "image/jpeg",
   "image/png",

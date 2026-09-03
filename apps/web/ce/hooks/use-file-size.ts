@@ -11,6 +11,7 @@ import { useInstance } from "@/hooks/store/use-instance";
 
 type TReturnProps = {
   maxFileSize: number;
+  maxPdfFileSize: number;
 };
 
 export const useFileSize = (): TReturnProps => {
@@ -19,5 +20,6 @@ export const useFileSize = (): TReturnProps => {
 
   return {
     maxFileSize: config?.file_size_limit ?? MAX_FILE_SIZE,
+    maxPdfFileSize: config?.page_pdf_size_limit ?? 50 * 1024 * 1024,
   };
 };

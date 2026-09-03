@@ -29,7 +29,7 @@ export const useEditorConfig = () => {
   // store hooks
   const { assetsUploadPercentage } = useEditorAsset();
   // file size
-  const { maxFileSize } = useFileSize();
+  const { maxFileSize, maxPdfFileSize } = useFileSize();
   const { getExtendedEditorFileHandlers } = useExtendedEditorConfig();
 
   const getEditorFileHandlers = useCallback(
@@ -95,11 +95,12 @@ export const useEditorConfig = () => {
         duplicate: duplicateFile,
         validation: {
           maxFileSize,
+          maxPdfFileSize,
         },
         ...getExtendedEditorFileHandlers({ projectId, workspaceSlug }),
       };
     },
-    [assetsUploadPercentage, getExtendedEditorFileHandlers, maxFileSize]
+    [assetsUploadPercentage, getExtendedEditorFileHandlers, maxFileSize, maxPdfFileSize]
   );
 
   return {

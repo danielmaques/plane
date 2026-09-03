@@ -127,6 +127,13 @@ export const insertFilesSafely = async (args: InsertFilesSafelyArgs) => {
           event,
         });
       } else if (fileType === "attachment") {
+        if (file.type === "application/pdf" && file.name.toLowerCase().endsWith(".pdf")) {
+          editor.commands.insertPdfAttachment?.({
+            file,
+            pos,
+            event,
+          });
+        }
       }
     } catch (error) {
       console.error(`Error while ${event}ing file:`, error);

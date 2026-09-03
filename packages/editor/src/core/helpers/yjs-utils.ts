@@ -245,6 +245,18 @@ export const convertHTMLDocumentToAllFormats = (args: TConvertHTMLDocumentToAllF
   return allFormats;
 };
 
+export const convertJSONDocumentToAllFormats = (args: {
+  document_json: JSONContent;
+  variant: "rich" | "document";
+}): TDocumentPayload => {
+  const { document_json, variant } = args;
+  const extensions = variant === "rich" ? RICH_TEXT_EDITOR_EXTENSIONS : DOCUMENT_EDITOR_EXTENSIONS;
+  return convertHTMLDocumentToAllFormats({
+    document_html: generateHTML(document_json, extensions),
+    variant,
+  });
+};
+
 export const extractTextFromHTML = (html: string): string => {
   // Use DOMPurify to safely extract text and remove all HTML tags
   // This is more secure than regex as it handles edge cases and prevents injection

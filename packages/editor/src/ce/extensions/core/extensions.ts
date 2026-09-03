@@ -7,6 +7,8 @@
 import type { Extensions } from "@tiptap/core";
 // types
 import type { IEditorProps } from "@/types";
+// local imports
+import { PdfAttachmentExtension } from "../pdf-attachment";
 
 export type TCoreAdditionalExtensionsProps = Pick<
   IEditorProps,
@@ -14,6 +16,6 @@ export type TCoreAdditionalExtensionsProps = Pick<
 >;
 
 export const CoreEditorAdditionalExtensions = (props: TCoreAdditionalExtensionsProps): Extensions => {
-  const {} = props;
-  return [];
+  const { fileHandler } = props;
+  return [PdfAttachmentExtension(fileHandler)];
 };

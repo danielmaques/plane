@@ -26,9 +26,9 @@ type TActiveDropbarExtensions =
   | TAdditionalActiveDropbarExtensions;
 
 declare module "@tiptap/core" {
-  interface Commands {
+  interface Commands<ReturnType> {
     [CORE_EXTENSIONS.UTILITY]: {
-      updateAssetsUploadStatus: (updatedStatus: TFileHandler["assetsUploadStatus"]) => () => void;
+      updateAssetsUploadStatus: (updatedStatus: TFileHandler["assetsUploadStatus"]) => ReturnType;
       updateAssetsList: (
         args:
           | {
@@ -37,9 +37,9 @@ declare module "@tiptap/core" {
           | {
               idToRemove: string;
             }
-      ) => () => void;
-      addActiveDropbarExtension: (extension: TActiveDropbarExtensions) => () => void;
-      removeActiveDropbarExtension: (extension: TActiveDropbarExtensions) => () => void;
+      ) => ReturnType;
+      addActiveDropbarExtension: (extension: TActiveDropbarExtensions) => ReturnType;
+      removeActiveDropbarExtension: (extension: TActiveDropbarExtensions) => ReturnType;
     };
   }
   interface Storage {
@@ -105,35 +105,42 @@ export const UtilityExtension = (props: Props) => {
 
     addCommands() {
       return {
-        updateAssetsUploadStatus: (updatedStatus) => () => {
-          this.storage.assetsUploadStatus = updatedStatus;
-        },
+        updateAssetsUploadStatus:
+          (updatedStatus) =>
+          ({ dispatch, tr }) => {
+            this.storage.assetsUploadStatus = updatedStatus;
+            dispatch?.(tr.setMeta("assetsUploadStatusChanged", true));
+            return true;
+          },
         updateAssetsList: (args) => () => {
           const uniqueAssets = new Set(this.storage.assetsList);
           if ("asset" in args) {
-            const alreadyExists = this.storage.assetsList.find((asset) => asset.id === args.asset.id);
+            const alreadyExists = this.storage.assetsList.find((candidate) => candidate.id === args.asset.id);
             if (!alreadyExists) {
               uniqueAssets.add(args.asset);
             }
           } else if ("idToRemove" in args) {
-            const asset = this.storage.assetsList.find((asset) => asset.id === args.idToRemove);
-            if (asset) {
-              uniqueAssets.delete(asset);
+            const assetToRemove = this.storage.assetsList.find((candidate) => candidate.id === args.idToRemove);
+            if (assetToRemove) {
+              uniqueAssets.delete(assetToRemove);
             }
           }
           this.storage.assetsList = Array.from(uniqueAssets);
+          return true;
         },
         addActiveDropbarExtension: (extension) => () => {
           const index = this.storage.activeDropbarExtensions.indexOf(extension);
           if (index === -1) {
             this.storage.activeDropbarExtensions.push(extension);
           }
+          return true;
         },
         removeActiveDropbarExtension: (extension) => () => {
           const index = this.storage.activeDropbarExtensions.indexOf(extension);
           if (index !== -1) {
             this.storage.activeDropbarExtensions.splice(index, 1);
           }
+          return true;
         },
       };
     },
