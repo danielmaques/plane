@@ -133,6 +133,7 @@ jobs:
           test -n "$COOLIFY_API_TOKEN"
           test -n "$COOLIFY_DEPLOY_WEBHOOK"
           curl --fail --show-error --silent \
+            --request POST \
             --retry 3 \
             --retry-all-errors \
             --header "Authorization: Bearer ${COOLIFY_API_TOKEN}" \
