@@ -12,7 +12,7 @@ import { EPageAccess } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 // plane types
 import { Button } from "@plane/propel/button";
-import { FolderPlus } from "lucide-react";
+import { FolderPlus, Upload } from "lucide-react";
 import { PageIcon } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TPage } from "@plane/types";
@@ -21,6 +21,7 @@ import { Breadcrumbs, Header } from "@plane/ui";
 // helpers
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { FolderFormModal } from "@/components/pages/folders";
+import { MarkdownImportModal } from "@/components/pages/modals/markdown-import-modal";
 // hooks
 import { useProject } from "@/hooks/store/use-project";
 // plane web imports
@@ -32,6 +33,7 @@ export const PagesListHeader = observer(function PagesListHeader() {
   // states
   const [isCreatingPage, setIsCreatingPage] = useState(false);
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
+  const [isImportingMarkdown, setIsImportingMarkdown] = useState(false);
   // router
   const router = useRouter();
   const { workspaceSlug, projectId } = useParams();
@@ -79,6 +81,14 @@ export const PagesListHeader = observer(function PagesListHeader() {
         isOpen={isCreatingFolder}
         onClose={() => setIsCreatingFolder(false)}
       />
+      <MarkdownImportModal
+        access={activeFolder?.access ?? (pageType === "private" ? EPageAccess.PRIVATE : EPageAccess.PUBLIC)}
+        folderId={activeFolder?.id ?? null}
+        isOpen={isImportingMarkdown}
+        onClose={() => setIsImportingMarkdown(false)}
+        projectId={projectId?.toString() ?? ""}
+        workspaceSlug={workspaceSlug?.toString() ?? ""}
+      />
       <Header>
         <Header.LeftItem>
           <Breadcrumbs isLoading={loader === "init-loader"}>
@@ -101,6 +111,10 @@ export const PagesListHeader = observer(function PagesListHeader() {
         </Header.LeftItem>
         {canCurrentUserCreatePage && pageType !== "archived" && (
           <Header.RightItem className="gap-2">
+            <Button variant="secondary" size="lg" onClick={() => setIsImportingMarkdown(true)}>
+              <Upload className="mr-1 h-4 w-4" />
+              {t("page_markdown_import.action")}
+            </Button>
             {!activeFolder && (
               <Button variant="secondary" size="lg" onClick={() => setIsCreatingFolder(true)}>
                 <FolderPlus className="mr-1 h-4 w-4" />
