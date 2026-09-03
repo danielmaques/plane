@@ -4,16 +4,21 @@ This runbook deploys the Community/AGPL page-folder extension without replacing 
 
 ## Release artifacts
 
-Build the branch `codex/feat-page-folders-v1.3.0`, which is based on the official `v1.3.0` tag. Run the `Publish Page Folders images` workflow with tag `v1.3.0-folders.1`. It publishes:
+Build the branch `codex/feat-page-folders-v1.3.0`, which is based on the official `v1.3.0` tag. The `Publish Page Folders images` workflow run `33743394599` completed successfully from commit `500ee24cd783d0538e69c1c4b4aab5caf725134a` and published:
 
-- `ghcr.io/<owner>/plane-frontend:v1.3.0-folders.1`
-- `ghcr.io/<owner>/plane-backend:v1.3.0-folders.1`
+- `ghcr.io/danielmaques/plane-frontend:v1.3.0-folders.1`
+- `ghcr.io/danielmaques/plane-backend:v1.3.0-folders.1`
 
-After the first workflow run, make both GHCR packages public in the fork's package settings. If they remain private, configure a read-only GHCR credential in Coolify instead. Never put registry tokens in Compose.
+Both packages are public and expose `linux/amd64` images. Pin the OCI index digests in staging and production:
+
+| Image    | OCI index digest                                                          |
+| -------- | ------------------------------------------------------------------------- |
+| Frontend | `sha256:fa9575213dd62d000e294301bbc86c99e1c3d4646330930e2d9efd2cde366873` |
+| Backend  | `sha256:96eb14e1b2390df0f60d6f6772b800a90d6b282c5165e414f177b989f46293f7` |
 
 The frontend image is used only by `web`. The backend image is shared by `api`, `worker`, `beat-worker`, and `migrator`. Keep the official `proxy`, `admin`, `space`, and `live` images at `v1.3.0`.
 
-## Production inventory captured before deployment
+## Production inventory checklist
 
 The current Coolify application uses these official images:
 
@@ -22,14 +27,14 @@ The current Coolify application uses these official images:
 | `web`                                      | `makeplane/plane-frontend:v1.3.0` |
 | `api`, `worker`, `beat-worker`, `migrator` | `makeplane/plane-backend:v1.3.0`  |
 
-Preserve PostgreSQL 15.7, Redis, RabbitMQ, MinIO, proxy, admin, space, and live unchanged. The production data mounts currently include:
+Preserve PostgreSQL, Redis, RabbitMQ, MinIO, proxy, admin, space, and live unchanged. Record the production data mounts in a private deployment record:
 
-| Data          | Named volume                       | Container path             |
-| ------------- | ---------------------------------- | -------------------------- |
-| PostgreSQL    | `jpihygm2gggmkcg5jgzdxron_pgdata`  | `/var/lib/postgresql/data` |
-| MinIO uploads | `jpihygm2gggmkcg5jgzdxron_uploads` | `/export`                  |
+| Data          | Value to record privately                               |
+| ------------- | ------------------------------------------------------- |
+| PostgreSQL    | Named volume, container path, size, and owner           |
+| MinIO uploads | Named volume or bucket, container path, size, and owner |
 
-Reconfirm this inventory immediately before deployment and record the resolved digest for every current image. Coolify currently reports unapplied Compose changes and no scheduled backups; resolve both conditions before creating staging or changing production.
+Reconfirm this inventory immediately before deployment and record the resolved digest for every current image. Resolve pending Compose changes, missing backup schedules, failed backup executions, and missing off-host backup destinations before creating staging or changing production. Do not commit the private deployment record, environment values, resource UUIDs, internal hostnames, or volume names to the public fork.
 
 ## Back up production
 
