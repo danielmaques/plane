@@ -1,4 +1,4 @@
-name: Publish Page Folders images
+name: Publish Page extensions images
 
 on:
   workflow_dispatch:
@@ -6,7 +6,7 @@ on:
       tag:
         description: Versioned image tag
         required: true
-        default: v1.3.0-folders.1
+        default: v1.3.0-folders.2
         type: string
 
 permissions:
