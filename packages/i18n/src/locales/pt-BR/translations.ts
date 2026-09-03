@@ -5,6 +5,33 @@
  */
 
 export default {
+  page_folders: {
+    new_folder: "Nova pasta",
+    rename_folder: "Renomear pasta",
+    delete_folder: "Excluir pasta",
+    move_page: "Mover página para uma pasta",
+    move: "Mover",
+    create: "Criar pasta",
+    rename: "Renomear",
+    cancel: "Cancelar",
+    root: "Raiz de Páginas",
+    name_placeholder: "Nome da pasta",
+    add_page: "Adicionar página",
+    adding_page: "Adicionando",
+    delete_confirmation: "Tem certeza de que deseja excluir a pasta",
+    delete_empty_only: "Somente pastas vazias podem ser excluídas.",
+    toast: {
+      success_title: "Sucesso!",
+      error_title: "Erro!",
+      created: "Pasta criada com sucesso.",
+      renamed: "Pasta renomeada com sucesso.",
+      deleted: "Pasta excluída com sucesso.",
+      page_moved: "Página movida com sucesso.",
+      save_failed: "Não foi possível salvar a pasta. Tente novamente.",
+      delete_failed: "Não foi possível excluir a pasta. Verifique se ela está vazia.",
+      move_failed: "Não foi possível mover a página. Tente novamente.",
+    },
+  },
   sidebar: {
     projects: "Projetos",
     pages: "Páginas",

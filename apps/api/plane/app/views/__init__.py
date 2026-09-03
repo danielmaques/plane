@@ -173,6 +173,7 @@ from .page.base import (
     PagesDescriptionViewSet,
     PageDuplicateEndpoint,
 )
+from .page.folder import PageFolderViewSet
 from .page.version import PageVersionEndpoint
 
 from .search.base import GlobalSearchEndpoint, SearchEndpoint

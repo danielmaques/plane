@@ -44,6 +44,7 @@ from plane.db.models import (
     ProjectPage,
     Project,
     UserRecentVisit,
+    WorkspaceMember,
 )
 from plane.utils.error_codes import ERROR_CODES
 
@@ -70,6 +71,23 @@ def unarchive_archive_page_and_descendants(page_id, archived_at):
     # Execute the SQL query
     with connection.cursor() as cursor:
         cursor.execute(sql, [page_id, archived_at])
+
+
+def is_page_admin(user, slug, project_id):
+    is_project_admin = ProjectMember.objects.filter(
+        member=user,
+        workspace__slug=slug,
+        project_id=project_id,
+        role=ROLE.ADMIN.value,
+        is_active=True,
+    ).exists()
+    is_workspace_admin = WorkspaceMember.objects.filter(
+        member=user,
+        workspace__slug=slug,
+        role=ROLE.ADMIN.value,
+        is_active=True,
+    ).exists()
+    return is_project_admin or is_workspace_admin
 
 
 class PageViewSet(BaseViewSet):
@@ -99,6 +117,7 @@ class PageViewSet(BaseViewSet):
             .prefetch_related("projects")
             .select_related("workspace")
             .select_related("owned_by")
+            .select_related("folder")
             .annotate(is_favorite=Exists(subquery))
             .order_by(self.request.GET.get("order_by", "-created_at"))
             .prefetch_related("labels")
@@ -131,6 +150,7 @@ class PageViewSet(BaseViewSet):
             data=request.data,
             context={
                 "project_id": project_id,
+                "workspace_slug": slug,
                 "owned_by_id": request.user.id,
                 "description_json": request.data.get("description_json", {}),
                 "description_binary": request.data.get("description_binary", None),
@@ -179,7 +199,25 @@ class PageViewSet(BaseViewSet):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            serializer = PageDetailSerializer(page, data=request.data, partial=True)
+            if (
+                "folder_id" in request.data
+                and page.owned_by_id != request.user.id
+                and not is_page_admin(request.user, slug, project_id)
+            ):
+                return Response(
+                    {"error": "Only the page owner or an administrator can move it."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
+            serializer = PageDetailSerializer(
+                page,
+                data=request.data,
+                partial=True,
+                context={
+                    "project_id": project_id,
+                    "workspace_slug": slug,
+                },
+            )
             page_description = page.description_html
             if serializer.is_valid():
                 serializer.save()
@@ -285,7 +323,11 @@ class PageViewSet(BaseViewSet):
             )
 
         page.access = access
-        page.save()
+        update_fields = ["access"]
+        if page.folder_id and page.folder.access != access:
+            page.folder = None
+            update_fields.append("folder")
+        page.save(update_fields=update_fields)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     def list(self, request, slug, project_id):

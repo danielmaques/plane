@@ -5,6 +5,33 @@
  */
 
 export default {
+  page_folders: {
+    new_folder: "New folder",
+    rename_folder: "Rename folder",
+    delete_folder: "Delete folder",
+    move_page: "Move page to folder",
+    move: "Move",
+    create: "Create folder",
+    rename: "Rename",
+    cancel: "Cancel",
+    root: "Pages root",
+    name_placeholder: "Folder name",
+    add_page: "Add page",
+    adding_page: "Adding",
+    delete_confirmation: "Are you sure you want to delete the folder",
+    delete_empty_only: "Only empty folders can be deleted.",
+    toast: {
+      success_title: "Success!",
+      error_title: "Error!",
+      created: "Folder created successfully.",
+      renamed: "Folder renamed successfully.",
+      deleted: "Folder deleted successfully.",
+      page_moved: "Page moved successfully.",
+      save_failed: "Folder could not be saved. Please try again.",
+      delete_failed: "Folder could not be deleted. Make sure it is empty.",
+      move_failed: "Page could not be moved. Please try again.",
+    },
+  },
   sidebar: {
     projects: "Projekty",
     pages: "Stránky",

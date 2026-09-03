@@ -9,6 +9,7 @@ from django.utils import timezone
 
 # Django imports
 from django.db import models
+from django.db.models.functions import Lower
 
 # Module imports
 from plane.utils.html_processor import strip_tags
@@ -18,6 +19,55 @@ from .base import BaseModel
 
 def get_view_props():
     return {"full_width": False}
+
+
+class PageFolder(BaseModel):
+    PRIVATE_ACCESS = 1
+    PUBLIC_ACCESS = 0
+
+    ACCESS_CHOICES = ((PRIVATE_ACCESS, "Private"), (PUBLIC_ACCESS, "Public"))
+
+    workspace = models.ForeignKey(
+        "db.Workspace",
+        on_delete=models.CASCADE,
+        related_name="page_folders",
+    )
+    project = models.ForeignKey(
+        "db.Project",
+        on_delete=models.CASCADE,
+        related_name="page_folders",
+    )
+    name = models.CharField(max_length=255)
+    access = models.PositiveSmallIntegerField(choices=ACCESS_CHOICES, default=PUBLIC_ACCESS)
+    owned_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="page_folders",
+    )
+
+    class Meta:
+        verbose_name = "Page Folder"
+        verbose_name_plural = "Page Folders"
+        db_table = "page_folders"
+        ordering = ("name", "created_at")
+        constraints = [
+            models.UniqueConstraint(
+                Lower("name"),
+                "project",
+                condition=models.Q(access=0, deleted_at__isnull=True),
+                name="page_folder_unique_public_name",
+            ),
+            models.UniqueConstraint(
+                Lower("name"),
+                "project",
+                "owned_by",
+                condition=models.Q(access=1, deleted_at__isnull=True),
+                name="page_folder_unique_private_name",
+            ),
+        ]
+
+    def __str__(self):
+        return self.name
 
 
 class Page(BaseModel):
@@ -43,6 +93,13 @@ class Page(BaseModel):
         null=True,
         blank=True,
         related_name="child_page",
+    )
+    folder = models.ForeignKey(
+        "db.PageFolder",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="pages",
     )
     archived_at = models.DateField(null=True)
     is_locked = models.BooleanField(default=False)

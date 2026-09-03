@@ -14,12 +14,71 @@ from plane.utils.content_validator import (
 )
 from plane.db.models import (
     Page,
+    PageFolder,
     PageLabel,
     Label,
     ProjectPage,
     Project,
     PageVersion,
 )
+
+
+class PageFolderSerializer(BaseSerializer):
+    class Meta:
+        model = PageFolder
+        fields = [
+            "id",
+            "name",
+            "access",
+            "owned_by",
+            "project",
+            "workspace",
+            "created_at",
+            "updated_at",
+            "created_by",
+            "updated_by",
+        ]
+        read_only_fields = [
+            "owned_by",
+            "project",
+            "workspace",
+            "created_by",
+            "updated_by",
+        ]
+
+    def validate_name(self, value):
+        name = value.strip()
+        if not name:
+            raise serializers.ValidationError("Folder name cannot be empty.")
+        return name
+
+    def validate(self, attrs):
+        project_id = self.context["project_id"]
+        owned_by_id = self.context["owned_by_id"]
+        instance = self.instance
+
+        if instance and "access" in attrs and attrs["access"] != instance.access:
+            raise serializers.ValidationError({"access": "Folder access cannot be changed."})
+
+        name = attrs.get("name", instance.name if instance else None)
+        access = attrs.get("access", instance.access if instance else PageFolder.PUBLIC_ACCESS)
+        duplicates = PageFolder.objects.filter(project_id=project_id, access=access, name__iexact=name)
+        if access == PageFolder.PRIVATE_ACCESS:
+            duplicates = duplicates.filter(owned_by_id=owned_by_id)
+        if instance:
+            duplicates = duplicates.exclude(pk=instance.pk)
+        if duplicates.exists():
+            raise serializers.ValidationError({"name": "A folder with this name already exists."})
+
+        return attrs
+
+    def create(self, validated_data):
+        return PageFolder.objects.create(
+            **validated_data,
+            project_id=self.context["project_id"],
+            workspace_id=self.context["workspace_id"],
+            owned_by_id=self.context["owned_by_id"],
+        )
 
 
 class PageSerializer(BaseSerializer):
@@ -32,6 +91,12 @@ class PageSerializer(BaseSerializer):
     # Many to many
     label_ids = serializers.ListField(child=serializers.UUIDField(), required=False)
     project_ids = serializers.ListField(child=serializers.UUIDField(), required=False)
+    folder_id = serializers.PrimaryKeyRelatedField(
+        source="folder",
+        queryset=PageFolder.objects.all(),
+        required=False,
+        allow_null=True,
+    )
 
     class Meta:
         model = Page
@@ -43,6 +108,7 @@ class PageSerializer(BaseSerializer):
             "color",
             "labels",
             "parent",
+            "folder_id",
             "is_favorite",
             "is_locked",
             "archived_at",
@@ -58,6 +124,30 @@ class PageSerializer(BaseSerializer):
         ]
         read_only_fields = ["workspace", "owned_by"]
 
+    def validate(self, attrs):
+        folder_was_supplied = "folder" in attrs
+        folder = attrs.get("folder")
+        instance = self.instance
+        access = attrs.get("access", instance.access if instance else Page.PUBLIC_ACCESS)
+        owned_by_id = instance.owned_by_id if instance else self.context.get("owned_by_id")
+
+        if folder_was_supplied and folder is not None:
+            if str(folder.project_id) != str(self.context.get("project_id")):
+                raise serializers.ValidationError({"folder_id": "Folder does not belong to this project."})
+            if folder.workspace.slug != self.context.get("workspace_slug"):
+                raise serializers.ValidationError({"folder_id": "Folder does not belong to this workspace."})
+            if folder.access != access:
+                raise serializers.ValidationError({"folder_id": "Folder and page access must match."})
+            if folder.access == PageFolder.PRIVATE_ACCESS and folder.owned_by_id != owned_by_id:
+                raise serializers.ValidationError(
+                    {"folder_id": "Private folders can only contain their owner's pages."}
+                )
+
+        if instance and not folder_was_supplied and instance.folder_id and instance.folder.access != access:
+            attrs["folder"] = None
+
+        return attrs
+
     def create(self, validated_data):
         labels = validated_data.pop("labels", None)
         project_id = self.context["project_id"]
@@ -67,7 +157,7 @@ class PageSerializer(BaseSerializer):
         description_html = self.context["description_html"]
 
         # Get the workspace id from the project
-        project = Project.objects.get(pk=project_id)
+        project = Project.objects.get(pk=project_id, workspace__slug=self.context["workspace_slug"])
 
         # Create the page
         page = Page.objects.create(

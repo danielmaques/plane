@@ -7,7 +7,7 @@
 import { useState } from "react";
 import { observer } from "mobx-react";
 // plane imports
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { EUserPermissionsLevel, EPageAccess } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { EmptyStateDetailed } from "@plane/propel/empty-state";
@@ -33,8 +33,7 @@ export const PagesListMainContent = observer(function PagesListMainContent(props
   const { t } = useTranslation();
   // store hooks
   const { currentProjectDetails } = useProject();
-  const { isAnyPageAvailable, getCurrentProjectFilteredPageIdsByTab, getCurrentProjectPageIdsByTab, loader } =
-    usePageStore(storeType);
+  const { folderLoader, getCurrentProjectPageListState, getPageFolderById, loader, filters } = usePageStore(storeType);
   const { allowPermissions } = useUserPermissions();
   const { createPage } = usePageStore(EPageStoreType.PROJECT);
   // states
@@ -42,9 +41,18 @@ export const PagesListMainContent = observer(function PagesListMainContent(props
   // router
   const router = useRouter();
   const { workspaceSlug } = useParams();
+  const searchParams = useSearchParams();
+  const folderId = searchParams.get("folder");
   // derived values
-  const pageIds = getCurrentProjectPageIdsByTab(pageType);
-  const filteredPageIds = getCurrentProjectFilteredPageIdsByTab(pageType);
+  const selectedFolder = folderId ? getPageFolderById(folderId) : undefined;
+  const activeFolder =
+    selectedFolder &&
+    (pageType === "archived" ||
+      selectedFolder.access === (pageType === "private" ? EPageAccess.PRIVATE : EPageAccess.PUBLIC))
+      ? selectedFolder
+      : undefined;
+  const { folderIds, pageIds } = getCurrentProjectPageListState(pageType, activeFolder?.id ?? null);
+  const hasVisibleContent = folderIds.length > 0 || pageIds.length > 0;
   const canPerformEmptyStateActions = allowPermissions(
     [EUserProjectRoles.ADMIN, EUserProjectRoles.MEMBER],
     EUserPermissionsLevel.PROJECT
@@ -55,13 +63,14 @@ export const PagesListMainContent = observer(function PagesListMainContent(props
     setIsCreatingPage(true);
 
     const payload: Partial<TPage> = {
-      access: pageType === "private" ? EPageAccess.PRIVATE : EPageAccess.PUBLIC,
+      access: activeFolder?.access ?? (pageType === "private" ? EPageAccess.PRIVATE : EPageAccess.PUBLIC),
+      folder_id: activeFolder?.id ?? null,
     };
 
     await createPage(payload)
       .then((res) => {
         const pageId = `/${workspaceSlug}/projects/${currentProjectDetails?.id}/pages/${res?.id}`;
-        router.push(pageId);
+        return router.push(pageId);
       })
       .catch((err) => {
         setToast({
@@ -73,28 +82,17 @@ export const PagesListMainContent = observer(function PagesListMainContent(props
       .finally(() => setIsCreatingPage(false));
   };
 
-  if (loader === "init-loader") return <PageLoader />;
-  // if no pages exist in the active page type
-  if (!isAnyPageAvailable || pageIds?.length === 0) {
-    if (!isAnyPageAvailable) {
-      return (
-        <EmptyStateDetailed
-          assetKey="page"
-          title={t("project_empty_state.pages.title")}
-          description={t("project_empty_state.pages.description")}
-          actions={[
-            {
-              label: t("project_empty_state.pages.cta_primary"),
-              onClick: () => {
-                handleCreatePage();
-              },
-              variant: "primary",
-              disabled: !canPerformEmptyStateActions || isCreatingPage,
-            },
-          ]}
-        />
-      );
-    }
+  if (loader === "init-loader" || folderLoader === "init-loader") return <PageLoader />;
+  if (!hasVisibleContent && filters.searchQuery.trim())
+    return (
+      <EmptyStateDetailed
+        assetKey="search"
+        title={t("common_empty_state.search.title")}
+        description={t("common_empty_state.search.description")}
+      />
+    );
+
+  if (!hasVisibleContent) {
     if (pageType === "public")
       return (
         <EmptyStateDetailed
@@ -140,15 +138,5 @@ export const PagesListMainContent = observer(function PagesListMainContent(props
         />
       );
   }
-  // if no pages match the filter criteria
-  if (filteredPageIds?.length === 0)
-    return (
-      <EmptyStateDetailed
-        assetKey="search"
-        title={t("common_empty_state.search.title")}
-        description={t("common_empty_state.search.description")}
-      />
-    );
-
   return <div className="h-full w-full overflow-hidden">{children}</div>;
 });

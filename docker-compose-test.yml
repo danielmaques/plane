@@ -1,0 +1,118 @@
+# Docker Compose for running the API pytest suite in an isolated environment.
+# All data services use tmpfs and never share production or local-development volumes.
+
+services:
+  test-db:
+    image: postgres:15.7-alpine
+    networks:
+      - test_env
+    environment:
+      POSTGRES_USER: plane
+      POSTGRES_PASSWORD: plane
+      POSTGRES_DB: plane
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U plane -d plane"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  test-redis:
+    image: valkey/valkey:7.2.11-alpine
+    networks:
+      - test_env
+    tmpfs:
+      - /data
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  test-mq:
+    image: rabbitmq:3.13.6-management-alpine
+    networks:
+      - test_env
+    environment:
+      RABBITMQ_DEFAULT_USER: plane
+      RABBITMQ_DEFAULT_PASS: plane
+      RABBITMQ_DEFAULT_VHOST: plane
+    tmpfs:
+      - /var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+
+  test-minio:
+    image: minio/minio
+    networks:
+      - test_env
+    environment:
+      MINIO_ROOT_USER: access-key
+      MINIO_ROOT_PASSWORD: secret-key
+    entrypoint: >
+      /bin/sh -c "
+      mkdir -p /export/uploads &&
+      minio server /export --console-address ':9090' &
+      sleep 3 &&
+      mc alias set local http://localhost:9000 access-key secret-key &&
+      mc mb local/uploads -p || true &&
+      tail -f /dev/null
+      "
+    tmpfs:
+      - /export
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  api-tests:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile.dev
+      args:
+        DOCKER_BUILDKIT: 1
+    networks:
+      - test_env
+    env_file:
+      - ./apps/api/.env.example
+    environment:
+      DJANGO_SETTINGS_MODULE: plane.settings.test
+      SECRET_KEY: test-only-secret-key
+      POSTGRES_HOST: test-db
+      DATABASE_URL: postgresql://plane:plane@test-db:5432/plane
+      REDIS_HOST: test-redis
+      REDIS_URL: redis://test-redis:6379/
+      RABBITMQ_HOST: test-mq
+      AWS_S3_ENDPOINT_URL: http://test-minio:9000
+      EMAIL_HOST: test-smtp.invalid
+    volumes:
+      - ./apps/api:/code
+    working_dir: /code
+    depends_on:
+      test-db:
+        condition: service_healthy
+      test-redis:
+        condition: service_healthy
+      test-mq:
+        condition: service_healthy
+      test-minio:
+        condition: service_healthy
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+        pip install --no-cache-dir -r requirements/test.txt
+        mkdir -p plane/static-assets/collected-static
+        exec "$@"
+      - --
+    command: ["pytest"]
+
+networks:
+  test_env:
+    driver: bridge

@@ -15,6 +15,7 @@ import { ExtendedBasePage } from "@/plane-web/store/pages/extended-base-page";
 import type { RootStore } from "@/plane-web/store/root.store";
 // local imports
 import { PageEditorInstance } from "./page-editor-info";
+import { runOptimisticFolderMove } from "./page-folder.utils";
 
 export type TBasePage = TPage & {
   // observables
@@ -41,6 +42,7 @@ export type TBasePage = TPage & {
   addToFavorites: () => Promise<void>;
   removePageFromFavorites: () => Promise<void>;
   duplicate: () => Promise<TPage | undefined>;
+  moveToFolder: (folderId: string | null) => Promise<void>;
   mutateProperties: (data: Partial<TPage>, shouldUpdateName?: boolean) => void;
   setSyncingStatus: (status: "syncing" | "synced" | "error") => void;
   // sub-store
@@ -102,6 +104,7 @@ export class BasePage extends ExtendedBasePage implements TBasePage {
   created_at: Date | undefined;
   updated_at: Date | undefined;
   deleted_at: Date | undefined;
+  folder_id: string | null | undefined;
   // helpers
   oldName: string = "";
   // services
@@ -140,6 +143,7 @@ export class BasePage extends ExtendedBasePage implements TBasePage {
     this.updated_at = page?.updated_at || undefined;
     this.oldName = page?.name || "";
     this.deleted_at = page?.deleted_at || undefined;
+    this.folder_id = page?.folder_id ?? null;
 
     makeObservable(this, {
       // loaders
@@ -164,6 +168,7 @@ export class BasePage extends ExtendedBasePage implements TBasePage {
       created_at: observable.ref,
       updated_at: observable.ref,
       deleted_at: observable.ref,
+      folder_id: observable.ref,
       isSyncingWithServer: observable.ref,
       // helpers
       oldName: observable.ref,
@@ -186,6 +191,7 @@ export class BasePage extends ExtendedBasePage implements TBasePage {
       addToFavorites: action,
       removePageFromFavorites: action,
       duplicate: action,
+      moveToFolder: action,
       mutateProperties: action,
     });
 
@@ -240,6 +246,7 @@ export class BasePage extends ExtendedBasePage implements TBasePage {
       created_at: this.created_at,
       updated_at: this.updated_at,
       deleted_at: this.deleted_at,
+      folder_id: this.folder_id,
       ...this.asJSONExtended,
     };
   }
@@ -326,8 +333,10 @@ export class BasePage extends ExtendedBasePage implements TBasePage {
    */
   makePublic = async ({ shouldSync = true }) => {
     const pageAccess = this.access;
+    const pageFolderId = this.folder_id;
     runInAction(() => {
       this.access = EPageAccess.PUBLIC;
+      this.folder_id = null;
     });
 
     if (shouldSync) {
@@ -338,6 +347,7 @@ export class BasePage extends ExtendedBasePage implements TBasePage {
       } catch (error) {
         runInAction(() => {
           this.access = pageAccess;
+          this.folder_id = pageFolderId;
         });
         throw error;
       }
@@ -349,8 +359,10 @@ export class BasePage extends ExtendedBasePage implements TBasePage {
    */
   makePrivate = async ({ shouldSync = true }) => {
     const pageAccess = this.access;
+    const pageFolderId = this.folder_id;
     runInAction(() => {
       this.access = EPageAccess.PRIVATE;
+      this.folder_id = null;
     });
 
     if (shouldSync) {
@@ -361,6 +373,7 @@ export class BasePage extends ExtendedBasePage implements TBasePage {
       } catch (error) {
         runInAction(() => {
           this.access = pageAccess;
+          this.folder_id = pageFolderId;
         });
         throw error;
       }
@@ -533,6 +546,19 @@ export class BasePage extends ExtendedBasePage implements TBasePage {
    * @description duplicate the page
    */
   duplicate = async () => await this.services.duplicate();
+
+  moveToFolder = async (folderId: string | null) => {
+    const previousFolderId = this.folder_id;
+    await runOptimisticFolderMove({
+      previousFolderId,
+      nextFolderId: folderId,
+      apply: (value) =>
+        runInAction(() => {
+          this.folder_id = value;
+        }),
+      request: () => this.services.update({ folder_id: folderId }),
+    });
+  };
 
   /**
    * @description mutate multiple properties at once

@@ -5,6 +5,8 @@
  */
 
 import { observer } from "mobx-react";
+import { useParams, useSearchParams } from "next/navigation";
+import { EPageAccess } from "@plane/constants";
 // types
 import type { TPageNavigationTabs } from "@plane/types";
 // components
@@ -14,6 +16,7 @@ import type { EPageStoreType } from "@/plane-web/hooks/store";
 import { usePageStore } from "@/plane-web/hooks/store";
 // local imports
 import { PageListBlock } from "./block";
+import { FolderListBlock } from "../folders";
 
 type TPagesListRoot = {
   pageType: TPageNavigationTabs;
@@ -22,15 +25,33 @@ type TPagesListRoot = {
 
 export const PagesListRoot = observer(function PagesListRoot(props: TPagesListRoot) {
   const { pageType, storeType } = props;
+  const { workspaceSlug, projectId } = useParams();
+  const searchParams = useSearchParams();
+  const folderId = searchParams.get("folder");
   // store hooks
-  const { getCurrentProjectFilteredPageIdsByTab } = usePageStore(storeType);
+  const { getCurrentProjectPageListState, getPageFolderById } = usePageStore(storeType);
   // derived values
-  const filteredPageIds = getCurrentProjectFilteredPageIdsByTab(pageType);
+  const selectedFolder = folderId ? getPageFolderById(folderId) : undefined;
+  const activeFolderId =
+    selectedFolder &&
+    (pageType === "archived" ||
+      selectedFolder.access === (pageType === "private" ? EPageAccess.PRIVATE : EPageAccess.PUBLIC))
+      ? selectedFolder.id
+      : null;
+  const { folderIds, pageIds } = getCurrentProjectPageListState(pageType, activeFolderId);
 
-  if (!filteredPageIds) return <></>;
   return (
     <ListLayout>
-      {filteredPageIds.map((pageId) => (
+      {folderIds.map((currentFolderId) => (
+        <FolderListBlock
+          key={currentFolderId}
+          folderId={currentFolderId}
+          pageType={pageType}
+          projectId={projectId?.toString() ?? ""}
+          workspaceSlug={workspaceSlug?.toString() ?? ""}
+        />
+      ))}
+      {pageIds.map((pageId) => (
         <PageListBlock key={pageId} pageId={pageId} storeType={storeType} />
       ))}
     </ListLayout>
