@@ -1,6 +1,9 @@
 name: Publish Page extensions images
 
 on:
+  push:
+    branches:
+      - prod
   workflow_dispatch:
     inputs:
       tag:
@@ -23,12 +26,27 @@ jobs:
     runs-on: ubuntu-22.04
     outputs:
       owner: ${{ steps.owner.outputs.value }}
+      tag: ${{ steps.tags.outputs.production }}
+      sha_tag: ${{ steps.tags.outputs.revision }}
     steps:
       - id: owner
         name: Normalize registry owner
         env:
           REPOSITORY_OWNER: ${{ github.repository_owner }}
         run: echo "value=${REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+
+      - id: tags
+        name: Resolve immutable and production tags
+        env:
+          DISPATCH_TAG: ${{ inputs.tag }}
+        run: |
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            production_tag="${DISPATCH_TAG}"
+          else
+            production_tag="production"
+          fi
+          echo "production=${production_tag}" >> "$GITHUB_OUTPUT"
+          echo "revision=sha-${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
 
   frontend:
     name: Build and publish frontend
@@ -55,7 +73,9 @@ jobs:
           file: ./apps/web/Dockerfile.web
           platforms: linux/amd64
           push: true
-          tags: ghcr.io/${{ needs.metadata.outputs.owner }}/plane-frontend:${{ inputs.tag }}
+          tags: |
+            ghcr.io/${{ needs.metadata.outputs.owner }}/plane-frontend:${{ needs.metadata.outputs.tag }}
+            ghcr.io/${{ needs.metadata.outputs.owner }}/plane-frontend:${{ needs.metadata.outputs.sha_tag }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
@@ -88,10 +108,32 @@ jobs:
           file: ./apps/api/Dockerfile.api
           platforms: linux/amd64
           push: true
-          tags: ghcr.io/${{ needs.metadata.outputs.owner }}/plane-backend:${{ inputs.tag }}
+          tags: |
+            ghcr.io/${{ needs.metadata.outputs.owner }}/plane-backend:${{ needs.metadata.outputs.tag }}
+            ghcr.io/${{ needs.metadata.outputs.owner }}/plane-backend:${{ needs.metadata.outputs.sha_tag }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.licenses=AGPL-3.0-only
           cache-from: type=gha,scope=page-folders-backend
           cache-to: type=gha,mode=max,scope=page-folders-backend
+
+  deploy-production:
+    name: Deploy directly to production
+    needs:
+      - frontend
+      - backend
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Trigger Coolify production deployment
+        env:
+          COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
+          COOLIFY_DEPLOY_WEBHOOK: ${{ secrets.COOLIFY_DEPLOY_WEBHOOK }}
+        run: |
+          test -n "$COOLIFY_API_TOKEN"
+          test -n "$COOLIFY_DEPLOY_WEBHOOK"
+          curl --fail --show-error --silent \
+            --retry 3 \
+            --retry-all-errors \
+            --header "Authorization: Bearer ${COOLIFY_API_TOKEN}" \
+            "$COOLIFY_DEPLOY_WEBHOOK"
