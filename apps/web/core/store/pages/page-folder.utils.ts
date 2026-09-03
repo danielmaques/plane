@@ -4,6 +4,8 @@
  * See the LICENSE file for details.
  */
 
+import { sortBy } from "lodash-es";
+// plane imports
 import type { TPage, TPageFolder, TPageNavigationTabs } from "@plane/types";
 
 type TPageFolderListState = {
@@ -37,14 +39,12 @@ export const buildPageFolderListState = (params: TBuildPageFolderListState): TPa
   }
 
   const folderIdsWithPages = new Set(filteredPages.map((page) => page.folder_id).filter(Boolean));
-  const folderIds = folders
-    .filter((folder) => {
-      if (pageType === "archived") return folderIdsWithPages.has(folder.id);
-      if (pageType === "private") return folder.access === 1;
-      return folder.access === 0;
-    })
-    .toSorted((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }))
-    .map((folder) => folder.id);
+  const visibleFolders = folders.filter((folder) => {
+    if (pageType === "archived") return folderIdsWithPages.has(folder.id);
+    if (pageType === "private") return folder.access === 1;
+    return folder.access === 0;
+  });
+  const folderIds = sortBy(visibleFolders, (folder) => folder.name.toLocaleLowerCase()).map((folder) => folder.id);
 
   return {
     folderIds,
